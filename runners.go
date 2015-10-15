@@ -55,7 +55,7 @@ type MapReduceJob interface {
 	// Called at the end of the Map phase
 	MapFinal(emitter Emitter)
 
-	Reduce(key string, values []string, emitter Emitter)
+	Reduce(key string, values <-chan string, emitter Emitter)
 }
 
 // are in we in the map or reduce phase?
@@ -269,26 +269,36 @@ func reducer(mrjob MapReduceJob, r io.Reader, emitter Emitter) {
 	br := bufio.NewReader(r)
 
 	var currentKey string
-	values := []string{}
+	var values chan string
+
+	isFirstRun := true
+	var done chan bool
 
 	for {
+
 		mkv, err := readLineKeyValue(br)
 		if err != nil {
 			break
 		}
 
-		if currentKey == mkv.Key {
-			values = append(values, mkv.Value)
-		} else {
-			if currentKey != "" {
-				mrjob.Reduce(currentKey, values, emitter)
-				values = []string{}
+		if currentKey != mkv.Key || isFirstRun {
+			if !isFirstRun {
+				close(values)
+				<-done
 			}
+			isFirstRun = false
+			values = make(chan string, 64)
+			done = make(chan bool)
+			go func() {
+				mrjob.Reduce(currentKey, values, emitter)
+				done <- true
+				close(done)
+			}()
 			currentKey = mkv.Key
-			values = append(values, mkv.Value)
 		}
+		values <- mkv.Key
 	}
 
-	// final reducer call with pending 'values'
-	mrjob.Reduce(currentKey, values, emitter)
+	close(values)
+	<-done
 }
