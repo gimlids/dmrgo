@@ -296,7 +296,7 @@ func reducer(mrjob MapReduceJob, r io.Reader, emitter Emitter) {
 			}()
 			currentKey = mkv.Key
 		}
-		values <- mkv.Key
+		values <- mkv.Value
 	}
 
 	close(values)
