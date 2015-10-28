@@ -17,8 +17,9 @@ import (
 
 // KeyValue is the primary type for interacting with Hadoop.
 type KeyValue struct {
-	Key   string
-	Value string
+	ReduceKey string
+	SortKey   string
+	Value     string
 }
 
 func readLineValue(br *bufio.Reader) (*KeyValue, error) {
@@ -27,7 +28,8 @@ func readLineValue(br *bufio.Reader) (*KeyValue, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &KeyValue{"", s}, err
+	// this appears to be a punt for handling case where mapper input already has one or more key
+	return &KeyValue{"", "", s}, err
 }
 
 func readLineKeyValue(br *bufio.Reader) (*KeyValue, error) {
@@ -36,16 +38,25 @@ func readLineKeyValue(br *bufio.Reader) (*KeyValue, error) {
 	if err != nil {
 		return nil, err
 	}
+	k = strings.TrimRight(k, "\t")
+
+	keys := strings.SplitN(k, ",", 2)
+
+	var reduceKey string
+	var sortKey string
+	reduceKey = keys[0]
+	if len(keys) == 2 {
+		sortKey = keys[1]
+	}
 
 	v, err := br.ReadString('\n')
 	if err != nil {
 		return nil, err
 	}
 
-	k = strings.TrimRight(k, "\t")
 	v = strings.TrimRight(v, "\n")
 
-	return &KeyValue{k, v}, nil
+	return &KeyValue{reduceKey, sortKey, v}, nil
 }
 
 // MapReduceJob is the interface expected by the job runner
@@ -55,7 +66,7 @@ type MapReduceJob interface {
 	// Called at the end of the Map phase
 	MapFinal(emitter Emitter)
 
-	Reduce(key string, values <-chan string, emitter Emitter)
+	Reduce(reduceKey string, sortKey string, values <-chan string, emitter Emitter)
 }
 
 // are in we in the map or reduce phase?
@@ -268,7 +279,7 @@ func reducer(mrjob MapReduceJob, r io.Reader, emitter Emitter) {
 
 	br := bufio.NewReader(r)
 
-	var currentKey string
+	var currentReduceKey string
 	var values chan string
 
 	isFirstRun := true
@@ -281,7 +292,7 @@ func reducer(mrjob MapReduceJob, r io.Reader, emitter Emitter) {
 			break
 		}
 
-		if currentKey != mkv.Key || isFirstRun {
+		if currentReduceKey != mkv.ReduceKey || isFirstRun {
 			if !isFirstRun {
 				close(values)
 				<-done
@@ -290,11 +301,11 @@ func reducer(mrjob MapReduceJob, r io.Reader, emitter Emitter) {
 			values = make(chan string, 64)
 			done = make(chan bool)
 			go func() {
-				mrjob.Reduce(currentKey, values, emitter)
+				mrjob.Reduce(currentReduceKey, mkv.SortKey, values, emitter)
 				done <- true
 				close(done)
 			}()
-			currentKey = mkv.Key
+			currentReduceKey = mkv.ReduceKey
 		}
 		values <- mkv.Value
 	}

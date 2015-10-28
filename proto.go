@@ -22,7 +22,7 @@ type StreamProtocol interface {
 	UnmarshalKVs(key string, values []string, k interface{}, vs interface{})
 
 	// MarshalKV turns a key/value pair into a KeyValue
-	MarshalKV(key interface{}, value interface{}) *KeyValue
+	Marshal(reduceKey interface{}, sortKey interface{}, value interface{}) *KeyValue
 }
 
 // JSONProtocol parse input/output values as JSON strings
@@ -53,10 +53,11 @@ func (p *JSONProtocol) UnmarshalKVs(key string, values []string, k interface{}, 
 }
 
 // MarshalKV implements the StreamProtocol interface
-func (p *JSONProtocol) MarshalKV(key interface{}, value interface{}) *KeyValue {
-	k, _ := json.Marshal(key)
+func (p *JSONProtocol) Marshal(reduceKey interface{}, sortKey interface{}, value interface{}) *KeyValue {
+	r, _ := json.Marshal(reduceKey)
+	s, _ := json.Marshal(reduceKey)
 	v, _ := json.Marshal(value)
-	return &KeyValue{string(k), string(v)}
+	return &KeyValue{string(r), string(s), string(v)}
 }
 
 // TSVProtocol outputs keys as tab-separated lines
@@ -65,10 +66,7 @@ type TSVProtocol struct {
 }
 
 // MarshalKV implements the StreamProtocol interface
-func (p *TSVProtocol) MarshalKV(key interface{}, value interface{}) *KeyValue {
-
-	keyVal := reflect.ValueOf(key)
-	k := primitiveToString(keyVal)
+func (p *TSVProtocol) MarshalKV(reduceKey interface{}, sortKey interface{}, value interface{}) *KeyValue {
 
 	var vs []string
 
@@ -94,7 +92,13 @@ func (p *TSVProtocol) MarshalKV(key interface{}, value interface{}) *KeyValue {
 
 	vals := strings.Join(vs, "\t")
 
-	return &KeyValue{k, vals}
+	reduceKeyVal := reflect.ValueOf(reduceKey)
+	r := primitiveToString(reduceKeyVal)
+
+	sortKeyVal := reflect.ValueOf(reduceKey)
+	s := primitiveToString(sortKeyVal)
+
+	return &KeyValue{r, s, vals}
 }
 
 // UnmarshalKVs implements the StreamProtocol interface

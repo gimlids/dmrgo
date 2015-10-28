@@ -8,12 +8,13 @@ import (
 	"bufio"
 	"fmt"
 	"hash/adler32"
+	"net/url"
 	"os"
 )
 
 // Emitter emits key/value pairs
 type Emitter interface {
-	Emit(key string, value string)
+	Emit(reduceKey string, sortKey string, value string)
 	Flush()
 }
 
@@ -27,8 +28,14 @@ func newPrintEmitter(w *bufio.Writer) *printEmitter {
 	return e
 }
 
-func (e *printEmitter) Emit(key string, value string) {
-	e.w.WriteString(key)
+func (e *printEmitter) Emit(reduceKey string, sortKey string, value string) {
+	e.w.WriteString(url.QueryEscape(reduceKey))
+
+	if sortKey != "" {
+		e.w.WriteString(",")
+		e.w.WriteString(url.QueryEscape(sortKey))
+	}
+
 	e.w.WriteByte('\t')
 	e.w.WriteString(value)
 	e.w.WriteByte('\n')
@@ -64,12 +71,12 @@ func newPartitionEmitter(partitions uint, template string) *partitionEmitter {
 	return pe
 }
 
-func (e *partitionEmitter) Emit(key string, value string) {
+func (e *partitionEmitter) Emit(reduceKey string, sortKey string, value string) {
 
 	partition := uint32(0)
 
 	if e.partitions > 1 {
-		partition = adler32.Checksum([]byte(key)) % uint32(e.partitions)
+		partition = adler32.Checksum([]byte(reduceKey)) % uint32(e.partitions)
 	}
 
 	if e.emitters[partition] == nil {
@@ -80,7 +87,7 @@ func (e *partitionEmitter) Emit(key string, value string) {
 		e.emitters[partition] = newPrintEmitter(w)
 	}
 
-	e.emitters[partition].Emit(key, value)
+	e.emitters[partition].Emit(reduceKey, sortKey, value)
 }
 
 func (e *partitionEmitter) Flush() {
