@@ -29,6 +29,7 @@ func newPrintEmitter(w *bufio.Writer) *printEmitter {
 }
 
 func (e *printEmitter) Emit(reduceKey string, sortKey string, value string) {
+
 	e.w.WriteString(url.QueryEscape(reduceKey))
 
 	if sortKey != "" {

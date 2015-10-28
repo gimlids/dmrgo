@@ -55,7 +55,7 @@ func (p *JSONProtocol) UnmarshalKVs(key string, values []string, k interface{}, 
 // MarshalKV implements the StreamProtocol interface
 func (p *JSONProtocol) Marshal(reduceKey interface{}, sortKey interface{}, value interface{}) *KeyValue {
 	r, _ := json.Marshal(reduceKey)
-	s, _ := json.Marshal(reduceKey)
+	s, _ := json.Marshal(sortKey)
 	v, _ := json.Marshal(value)
 	return &KeyValue{string(r), string(s), string(v)}
 }

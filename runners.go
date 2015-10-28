@@ -9,6 +9,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,9 +45,16 @@ func readLineKeyValue(br *bufio.Reader) (*KeyValue, error) {
 
 	var reduceKey string
 	var sortKey string
-	reduceKey = keys[0]
+	reduceKey, err = url.QueryUnescape(keys[0])
+	if err != nil {
+		return nil, err
+	}
+
 	if len(keys) == 2 {
-		sortKey = keys[1]
+		sortKey, err = url.QueryUnescape(keys[1])
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	v, err := br.ReadString('\n')
@@ -76,6 +84,9 @@ var optDoReduce bool
 // or the full map/reduce code
 var optDoMapReduce bool
 
+// use a secondary sort key
+// var optSecondaryKey bool
+
 // how many output partitions should we use
 var optNumPartitions int
 
@@ -88,6 +99,7 @@ var optNumReducers int
 func init() {
 	flag.BoolVar(&optDoMap, "mapper", false, "run mapper code on stdin")
 	flag.BoolVar(&optDoReduce, "reducer", false, "run reducer on stdin")
+	// flag.BoolVar(&optSecondaryKey, "with-secondary-key", false, "group by primary key, sort by url-encoded secondary key (because we have to separate the two keys with a comma)")
 	flag.IntVar(&optNumPartitions, "partitions", 1, "parition data into sets")
 	flag.BoolVar(&optDoMapReduce, "mapreduce", false, "run full map/reduce")
 	flag.IntVar(&optNumMappers, "mappers", 4, "number of map processes")
@@ -230,7 +242,7 @@ func Main(mrjob MapReduceJob) {
 	}
 
 	if !optDoMap && !optDoReduce {
-		fmt.Println("neither map nor reduce called")
+		fmt.Println("neither map nor reduce nor secondary key reduce called")
 		os.Exit(1)
 	}
 
@@ -301,7 +313,7 @@ func reducer(mrjob MapReduceJob, r io.Reader, emitter Emitter) {
 			values = make(chan string, 64)
 			done = make(chan bool)
 			go func() {
-				mrjob.Reduce(currentReduceKey, mkv.SortKey, values, emitter)
+				mrjob.Reduce(mkv.ReduceKey, mkv.SortKey, values, emitter)
 				done <- true
 				close(done)
 			}()
